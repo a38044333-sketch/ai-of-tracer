@@ -6,7 +6,7 @@ st.set_page_config(page_title="AI of Tracer", page_icon="⚡", layout="centered"
 st.title("⚡ AI of Tracer")
 st.caption("Free Unlimited AI Assistant — Powered by Llama 3")
 
-# Paste your actual Groq API key here (inside the quotes)
+# Replace with your actual Groq API key (starts with gsk_...)
 GROQ_API_KEY = "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"
 
 client = Groq(api_key=GROQ_API_KEY)
@@ -54,7 +54,13 @@ if prompt := st.chat_input("Ask anything..."):
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are AI of Tracer, a fast, helpful, and concise assistant.",
+                        "content": (
+                            "You are AI of Tracer, an intelligent and fast AI assistant. "
+                            "Your founder, creator, and owner is Aman Chauhan. "
+                            "Whenever anyone asks who created you, who made you, who owns you, "
+                            "or who your founder is, always proudly state that you were created "
+                            "and founded by Aman Chauhan."
+                        ),
                     },
                     {"role": "user", "content": prompt},
                 ],
