@@ -1,13 +1,12 @@
 import streamlit as st
 from groq import Groq
-from streamlit_mic_recorder import speech_to_text
 
 st.set_page_config(page_title="AI of Tracer", page_icon="⚡", layout="centered")
 
 st.title("⚡ AI of Tracer")
 st.caption("Free Unlimited AI Assistant — Founded by Aman Chauhan")
 
-# Replace with your actual Groq API key (starts with gsk_...)
+# Your Groq API key
 GROQ_API_KEY = "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"
 
 client = Groq(api_key=GROQ_API_KEY)
@@ -17,6 +16,8 @@ def get_best_model():
     try:
         model_list = [m.id for m in client.models.list().data]
         preferred = [
+            "llama-3.3-70b-versatile",
+            "llama-3.1-8b-instant",
             "openai/gpt-oss-20b",
             "openai/gpt-oss-120b",
             "qwen/qwen3.8-27b",
@@ -30,38 +31,31 @@ def get_best_model():
                 return name
     except Exception:
         pass
-    return "openai/gpt-oss-20b"
+    return "llama-3.3-70b-versatile"
 
 ACTIVE_MODEL = get_best_model()
+
+# --- Sidebar: Camera Feature ---
+with st.sidebar:
+    st.header("📸 Visual Input")
+    captured_img = st.camera_input("Take a photo")
+    if captured_img:
+        st.success("Photo captured! (Tracer Vision)")
+    st.info("💡 **Voice Tip:** Use the mic icon on your phone or keyboard (Gboard) to talk directly to Tracer!")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# --- Sidebar: Camera & Voice Tools ---
-with st.sidebar:
-    st.header("📸 Visual & Audio Input")
-    
-    # 1. Camera Input Feature
-    captured_img = st.camera_input("Take a photo")
-    if captured_img:
-        st.success("Photo captured! (Tracer Vision)")
-    
-    # 2. Mic Input Feature (Speech to Text)
-    st.write("🎙️ **Voice Input:**")
-    voice_prompt = speech_to_text(language='en', start_prompt="Tap to Speak", stop_prompt="Stop Recording", key='voice_input')
-
-# Display previous conversation history
+# Display conversation history
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# Handle Chat Input (either from keyboard or mic)
-user_query = st.chat_input("Ask anything...") or voice_prompt
-
-if user_query:
-    st.session_state.messages.append({"role": "user", "content": user_query})
+# User prompt input
+if prompt := st.chat_input("Ask anything..."):
+    st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
-        st.markdown(user_query)
+        st.markdown(prompt)
 
     with st.chat_message("assistant"):
         try:
@@ -77,7 +71,7 @@ if user_query:
                             "and founded by Aman Chauhan."
                         ),
                     },
-                    {"role": "user", "content": user_query},
+                    {"role": "user", "content": prompt},
                 ],
                 model=ACTIVE_MODEL,
                 stream=True,
