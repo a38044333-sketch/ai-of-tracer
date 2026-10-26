@@ -1,14 +1,14 @@
 import streamlit as st
 from groq import Groq
 
-# 1. Custom Tab Name & Icon (Favicon)
+# 1. Custom Tab Title & Icon
 st.set_page_config(
     page_title="AI of Tracer",
-   page_icon="logo.png",
+    page_icon="⚡",
     layout="centered"
 )
 
-# 2. Hide Streamlit Branding (Hamburger menu, Footer, and Deploy button)
+# 2. Hide Streamlit Header, Footer, and Default Menu
 hide_streamlit_style = """
     <style>
     #MainMenu {visibility: hidden;}
@@ -19,11 +19,13 @@ hide_streamlit_style = """
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-# 3. Your App Branding & Header
+# 3. Header Branding
 col1, col2 = st.columns([1, 5])
 with col1:
-    # If you upload a logo.png, replace the markdown below with: st.image("logo.png", width=70)
-    st.image("logo.png", width=70), unsafe_allow_html=True)
+    try:
+        st.image("logo.png", width=70)
+    except Exception:
+        st.markdown("<h1 style='text-align: center; font-size: 50px; margin: 0;'>⚡</h1>", unsafe_allow_html=True)
 with col2:
     st.title("AI of Tracer")
     st.caption("Official AI Assistant — Created & Founded by Aman Chauhan")
