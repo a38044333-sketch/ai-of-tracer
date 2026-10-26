@@ -5,30 +5,46 @@ from groq import Groq
 st.set_page_config(
     page_title="AI of Tracer",
     page_icon="⚡",
-    layout="centered"
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
 
-# 2. Hide Streamlit Header, Footer, and Default Menu
+# 2. Aggressive CSS to hide all Streamlit badges, footers, headers, and menus on mobile
 hide_streamlit_style = """
     <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .viewerBadge_container__1QSob {display: none;}
+    /* Hide top header and hamburger menu */
+    header[data-testid="stHeader"] {display: none !important;}
+    #MainMenu {visibility: hidden !important; display: none !important;}
+    
+    /* Hide bottom footer & "Made with Streamlit" */
+    footer {visibility: hidden !important; display: none !important;}
+    
+    /* Hide Streamlit badge / toolbar at bottom right/left */
+    [data-testid="stStatusWidget"] {display: none !important;}
+    .viewerBadge_container__1QSob, .viewerBadge_link__1S137 {display: none !important;}
+    div[class*="viewerBadge"] {display: none !important;}
+    div[class*="stDeployButton"] {display: none !important;}
+    div[data-testid="stToolbar"] {display: none !important;}
+    
+    /* Clean custom app header styling */
+    .app-title {
+        font-size: 2.2rem;
+        font-weight: 800;
+        margin-bottom: 0px;
+        color: #ffffff;
+    }
+    .app-subtitle {
+        font-size: 0.95rem;
+        color: #9ca3af;
+        margin-bottom: 15px;
+    }
     </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-# 3. Header Branding
-col1, col2 = st.columns([1, 5])
-with col1:
-    try:
-        st.image("logo.png", width=70)
-    except Exception:
-        st.markdown("<h1 style='text-align: center; font-size: 50px; margin: 0;'>⚡</h1>", unsafe_allow_html=True)
-with col2:
-    st.title("AI of Tracer")
-    st.caption("Official AI Assistant — Created & Founded by Aman Chauhan")
+# 3. Your App Branding & Header
+st.markdown('<div class="app-title">⚡ AI of Tracer</div>', unsafe_allow_html=True)
+st.markdown('<div class="app-subtitle">Official AI Assistant — Created & Founded by <b>Aman Chauhan</b></div>', unsafe_allow_html=True)
 
 # Your Groq API key
 GROQ_API_KEY = "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"
@@ -68,7 +84,7 @@ with st.sidebar:
     st.divider()
     st.markdown("**App:** AI of Tracer")
     st.markdown("**Founder & Owner:** Aman Chauhan")
-    st.info("💡 **Voice Tip:** Use the mic icon on your mobile Gboard keyboard to talk directly!")
+    st.info("💡 **Voice Tip:** Use the mic button on your mobile keyboard (Gboard) to speak directly!")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
