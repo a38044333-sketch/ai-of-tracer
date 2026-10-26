@@ -150,4 +150,173 @@ function toggleTracerVoice() {
 
         recognition.onstart = function() {
             recognizing = true;
-            btn.style.background = 'linear-gradient(135deg, #ef4
+            btn.style.background = 'linear-gradient(135deg, #ef4444, #f97316)';
+            text.innerText = 'Listening... Bolen';
+        };
+
+        recognition.onresult = function(event) {
+            const transcript = event.results[0][0].transcript;
+            const parentDoc = window.parent.document;
+            const chatInput = parentDoc.querySelector('textarea[data-testid="stChatInputTextArea"]');
+            if (chatInput) {
+                chatInput.value = transcript;
+                chatInput.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        };
+
+        recognition.onerror = function() {
+            recognizing = false;
+            btn.style.background = 'linear-gradient(135deg, #0284c7, #6366f1)';
+            text.innerText = 'Tap to Speak';
+        };
+
+        recognition.onend = function() {
+            recognizing = false;
+            btn.style.background = 'linear-gradient(135deg, #0284c7, #6366f1)';
+            text.innerText = 'Tap to Speak';
+        };
+
+        recognition.start();
+    } else {
+        recognition.stop();
+    }
+}
+</script>
+"""
+components.html(speech_js, height=45)
+
+# 5. Groq Setup
+GROQ_API_KEY = "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"
+client = Groq(api_key=GROQ_API_KEY)
+
+
+@st.cache_resource
+def get_best_model():
+  try:
+    model_list = [m.id for m in client.models.list().data]
+    preferred = [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "openai/gpt-oss-20b",
+        "openai/gpt-oss-120b",
+        "qwen/qwen3.8-27b",
+        "meta-llama/llama-4-scout-17b-16e-instruct",
+    ]
+    for name in preferred:
+      if name in model_list:
+        return name
+    for name in model_list:
+      if "whisper" not in name and "guard" not in name:
+        return name
+  except Exception:
+    pass
+  return "llama-3.3-70b-versatile"
+
+
+ACTIVE_MODEL = get_best_model()
+
+# 6. Sidebar Tools
+with st.sidebar:
+  st.markdown("### 📸 Vision & Camera")
+  captured_img = st.camera_input("Tracer Lens")
+  if captured_img:
+    st.success("Frame captured!")
+  st.divider()
+  st.markdown("### 🎨 Features")
+  st.markdown("- **Image Generation:** Type `generate image of...` or `draw...`")
+  st.markdown("- **Multilingual:** Hindi, English & Hinglish support")
+  st.markdown("- **Voice Input:** Use the mic button above the chat")
+
+# 7. Natural System Prompt (Founding info ONLY if specifically asked)
+SYSTEM_PROMPT = """You are AI of Tracer, a highly capable, intelligent, helpful, and versatile AI assistant created and founded by Aman Chauhan.
+
+Rules:
+1. Greet naturally like ChatGPT or Gemini. NEVER introduce yourself with "I was founded by Aman Chauhan" or mention your founder unprompted. Start naturally and answer the user directly.
+2. If and ONLY IF the user explicitly asks about who created you, who made you, or who is your developer/owner/founder, proudly state that you were created and founded by Aman Chauhan.
+3. Language Support: Fluent in Hindi (हिन्दी), Hinglish, and English. Respond in whichever language the user uses or prefers.
+4. Keep replies structured, concise, clean, and helpful.
+"""
+
+# Initialize session messages naturally
+if "messages" not in st.session_state:
+  st.session_state.messages = [{
+      "role": "assistant",
+      "content": (
+          "Hello! How can I help you today? Aap mujhse Hindi ya English me baat"
+          " kar sakte hain."
+      ),
+  }]
+
+# Display history
+for msg in st.session_state.messages:
+  with st.chat_message(msg["role"]):
+    if msg.get("type") == "image":
+      st.image(msg["content"], caption=msg.get("caption", "Generated Image"))
+    else:
+      st.markdown(msg["content"])
+
+# User Input Handling
+if prompt := st.chat_input("Ask Tracer anything... (Hindi / English)"):
+  st.session_state.messages.append({"role": "user", "content": prompt})
+  with st.chat_message("user"):
+    st.markdown(prompt)
+
+  # Check for image generation intent
+  image_keywords = [
+      "generate image",
+      "create image",
+      "draw",
+      "photo of",
+      "image of",
+      "tasveer",
+      "chitra",
+      "photo banao",
+      "picture of",
+  ]
+  is_image_req = any(kw in prompt.lower() for kw in image_keywords)
+
+  with st.chat_message("assistant"):
+    if is_image_req:
+      with st.spinner("Generating image... 🎨"):
+        cleaned_query = prompt.lower()
+        for kw in image_keywords:
+          cleaned_query = cleaned_query.replace(kw, "")
+        cleaned_query = cleaned_query.strip() or "cyberpunk robot"
+
+        # High-speed Pollinations AI image generator API (free & instant)
+        image_url = f"https://image.pollinations.ai/prompt/{cleaned_query.replace(' ', '%20')}?width=1024&height=1024&nologo=true"
+        st.image(image_url, caption=f"Generated: {prompt}")
+        st.session_state.messages.append({
+            "role": "assistant",
+            "type": "image",
+            "content": image_url,
+            "caption": prompt,
+        })
+    else:
+      try:
+        stream = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                *[
+                    {"role": m["role"], "content": m["content"]}
+                    for m in st.session_state.messages
+                    if m.get("type") != "image"
+                ],
+            ],
+            model=ACTIVE_MODEL,
+            stream=True,
+        )
+
+        def generate_chunks():
+          for chunk in stream:
+            content = chunk.choices[0].delta.content
+            if content:
+              yield content
+
+        bot_reply = st.write_stream(generate_chunks)
+        st.session_state.messages.append(
+            {"role": "assistant", "content": bot_reply}
+        )
+
+      except Exception as e:
+        st.error(f"Error: {e}")
