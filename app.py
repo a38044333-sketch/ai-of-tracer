@@ -11,34 +11,31 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# 2. Universal CSS to eliminate ALL Streamlit logos, badges, footers, and headers
+# 2. Aggressive CSS to destroy ALL Streamlit badges, footers, headers, and watermark logos
 custom_css = """
     <style>
-    /* Complete dark background */
     .stApp {
         background: radial-gradient(circle at 50% 0%, #151b28 0%, #0b0f17 100%);
         color: #f1f5f9;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
-    /* 1. Hide entire Streamlit top bar & deploy button */
+    /* 1. COMPLETELY HIDE STREAMLIT TOP BAR & HAMBURGER */
     header, header[data-testid="stHeader"], div[data-testid="stHeader"] {
         display: none !important;
         visibility: hidden !important;
-        height: 0 !important;
+        height: 0px !important;
     }
     #MainMenu {
         display: none !important;
         visibility: hidden !important;
     }
 
-    /* 2. Hide entire footer and "Made with Streamlit" */
+    /* 2. COMPLETELY HIDE STREAMLIT FOOTER & HOSTED BADGE */
     footer {
         display: none !important;
         visibility: hidden !important;
     }
-
-    /* 3. Hide floating bottom badge ("Hosted with Streamlit", manage app, viewer badge) */
     [data-testid="stStatusWidget"],
     .viewerBadge_container__1QSob,
     .viewerBadge_link__1S137,
@@ -48,35 +45,18 @@ custom_css = """
     div[data-testid="stDecoration"],
     div[data-testid="manage-app-button"],
     button[title*="Streamlit"],
-    a[href*="streamlit.io"] {
+    a[href*="streamlit.io"],
+    svg[data-testid="stLogo"],
+    img[src*="streamlit"] {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
         pointer-events: none !important;
     }
 
-    /* 4. Hide any SVG or Image containing Streamlit logo */
-    svg[data-testid="stLogo"] {
-        display: none !important;
-    }
-    img[src*="streamlit"] {
-        display: none !important;
-    }
-
-    /* 5. Custom App Header */
-    .header-box {
-        display: flex;
-        align-items: center;
-        gap: 15px;
-        background: linear-gradient(135deg, rgba(30, 41, 59, 0.7), rgba(15, 23, 42, 0.85));
-        border: 1px solid rgba(56, 189, 248, 0.25);
-        border-radius: 18px;
-        padding: 12px 18px;
-        margin-bottom: 20px;
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-    }
-    .header-title {
-        font-size: 1.6rem;
+    /* 3. Clean Header Styling */
+    .app-header {
+        font-size: 1.8rem;
         font-weight: 800;
         background: linear-gradient(90deg, #38bdf8, #818cf8, #c084fc);
         -webkit-background-clip: text;
@@ -84,13 +64,14 @@ custom_css = """
         margin: 0;
         line-height: 1.2;
     }
-    .header-subtitle {
+    .app-subtitle {
         color: #94a3b8;
-        font-size: 0.8rem;
+        font-size: 0.85rem;
         margin-top: 2px;
+        margin-bottom: 12px;
     }
 
-    /* 6. Chat Bubbles */
+    /* 4. Chat Bubbles */
     div[data-testid="stChatMessage"] {
         background: rgba(30, 41, 59, 0.55) !important;
         border: 1px solid rgba(255, 255, 255, 0.08) !important;
@@ -103,7 +84,7 @@ custom_css = """
         border: 1px solid rgba(56, 189, 248, 0.25) !important;
     }
 
-    /* 7. Bottom Input Box */
+    /* 5. Bottom Input Box */
     div[data-testid="stChatInput"] {
         border-radius: 24px !important;
         border: 1px solid rgba(56, 189, 248, 0.3) !important;
@@ -122,7 +103,22 @@ custom_css = """
 """
 st.markdown(custom_css, unsafe_allow_html=True)
 
-# 3. Clean Header with your Logo (Clean Title & Subtitle)
+# JavaScript snippet that removes Streamlit's iframe wrapper badge in parent DOM
+js_cleaner = """
+<script>
+function cleanBadges() {
+    try {
+        const doc = window.parent.document;
+        const badges = doc.querySelectorAll('.viewerBadge_container__1QSob, [class*="viewerBadge"], [data-testid="manage-app-button"], footer, header');
+        badges.forEach(b => b.style.setProperty('display', 'none', 'important'));
+    } catch(e) {}
+}
+setInterval(cleanBadges, 500);
+</script>
+"""
+components.html(js_cleaner, height=0)
+
+# 3. Clean App Title (NO "created by" or "founded by" anywhere)
 col_logo, col_info = st.columns([1, 5])
 with col_logo:
   if os.path.exists("logo.png"):
@@ -134,10 +130,10 @@ with col_logo:
     )
 with col_info:
   st.markdown(
-      '<div class="header-title">AI of Tracer</div>', unsafe_allow_html=True
+      '<div class="app-header">AI of Tracer</div>', unsafe_allow_html=True
   )
   st.markdown(
-      '<div class="header-subtitle">Intelligent Assistant</div>',
+      '<div class="app-subtitle">Official AI Assistant</div>',
       unsafe_allow_html=True,
   )
 
@@ -170,7 +166,7 @@ let recognizing = false;
 function toggleTracerVoice() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-        alert("Voice recognition is supported in Chrome, Edge, and Android WebViews.");
+        alert("Voice dictation is supported in modern mobile browsers.");
         return;
     }
 
@@ -187,7 +183,7 @@ function toggleTracerVoice() {
         recognition.onstart = function() {
             recognizing = true;
             btn.style.background = 'linear-gradient(135deg, #ef4444, #f97316)';
-            text.innerText = 'Listening... Bolen';
+            text.innerText = 'Listening...';
         };
 
         recognition.onresult = function(event) {
@@ -252,111 +248,3 @@ def get_best_model():
 ACTIVE_MODEL = get_best_model()
 
 # 6. Sidebar Tools
-with st.sidebar:
-  st.markdown("### 📸 Vision & Camera")
-  captured_img = st.camera_input("Tracer Lens")
-  if captured_img:
-    st.success("Frame captured!")
-  st.divider()
-  st.markdown("### 🎨 Features")
-  st.markdown("- **Image Generation:** Type `draw...` or `image of...`")
-  st.markdown("- **Multilingual:** Hindi, Hinglish & English support")
-  st.markdown("- **Voice Input:** Tap the mic button above the chat")
-
-# 7. Strict System Prompt: NEVER mention creator unless directly asked
-SYSTEM_PROMPT = """You are AI of Tracer, an advanced, highly intelligent AI assistant.
-
-CRITICAL INSTRUCTIONS:
-1. Speak completely naturally, exactly like ChatGPT.
-2. NEVER mention who created you, who made you, or Aman Chauhan on your own. Do NOT introduce yourself with founder information.
-3. ONLY if the user specifically and directly asks a question like "Who made you?", "Who created you?", "Who is your founder?", or "Tumhe kisne banaya?", answer that you were created and founded by Aman Chauhan.
-4. Language: You are fully fluent in Hindi (हिन्दी), Hinglish, and English. Respond in whichever language the user uses.
-5. Provide clear, accurate, and concise answers.
-"""
-
-# Avatar assignment: Always use your robot logo for the bot avatar
-ASSISTANT_AVATAR = "logo.png" if os.path.exists("logo.png") else "⚡"
-
-# Completely normal welcome greeting (NO "founded by" or "created by")
-if "messages" not in st.session_state:
-  st.session_state.messages = [{
-      "role": "assistant",
-      "content": (
-          "Hello! How can I help you today? Aap Hindi ya English kisi bhi"
-          " bhasha me puch sakte hain."
-      ),
-  }]
-
-# Display history with custom robot logo avatar
-for msg in st.session_state.messages:
-  avatar_choice = ASSISTANT_AVATAR if msg["role"] == "assistant" else None
-  with st.chat_message(msg["role"], avatar=avatar_choice):
-    if msg.get("type") == "image":
-      st.image(msg["content"], caption=msg.get("caption", "Generated Image"))
-    else:
-      st.markdown(msg["content"])
-
-# User prompt
-if prompt := st.chat_input("Ask anything... (Hindi / English)"):
-  st.session_state.messages.append({"role": "user", "content": prompt})
-  with st.chat_message("user"):
-    st.markdown(prompt)
-
-  # Check for image generation intent
-  image_keywords = [
-      "generate image",
-      "create image",
-      "draw",
-      "photo of",
-      "image of",
-      "tasveer",
-      "chitra",
-      "photo banao",
-      "picture of",
-  ]
-  is_image_req = any(kw in prompt.lower() for kw in image_keywords)
-
-  with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
-    if is_image_req:
-      with st.spinner("Generating image... 🎨"):
-        cleaned_query = prompt.lower()
-        for kw in image_keywords:
-          cleaned_query = cleaned_query.replace(kw, "")
-        cleaned_query = cleaned_query.strip() or "cyberpunk robot"
-
-        image_url = f"https://image.pollinations.ai/prompt/{cleaned_query.replace(' ', '%20')}?width=1024&height=1024&nologo=true"
-        st.image(image_url, caption=f"Generated: {prompt}")
-        st.session_state.messages.append({
-            "role": "assistant",
-            "type": "image",
-            "content": image_url,
-            "caption": prompt,
-        })
-    else:
-      try:
-        stream = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                *[
-                    {"role": m["role"], "content": m["content"]}
-                    for m in st.session_state.messages
-                    if m.get("type") != "image"
-                ],
-            ],
-            model=ACTIVE_MODEL,
-            stream=True,
-        )
-
-        def generate_chunks():
-          for chunk in stream:
-            content = chunk.choices[0].delta.content
-            if content:
-              yield content
-
-        bot_reply = st.write_stream(generate_chunks)
-        st.session_state.messages.append(
-            {"role": "assistant", "content": bot_reply}
-        )
-
-      except Exception as e:
-        st.error(f"Error: {e}")
