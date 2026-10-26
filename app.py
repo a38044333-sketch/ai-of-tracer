@@ -1,10 +1,32 @@
 import streamlit as st
 from groq import Groq
 
-st.set_page_config(page_title="AI of Tracer", page_icon="⚡", layout="centered")
+# 1. Custom Tab Name & Icon (Favicon)
+st.set_page_config(
+    page_title="AI of Tracer",
+    page_icon="⚡",  # Can be an emoji or "logo.png"
+    layout="centered"
+)
 
-st.title("⚡ AI of Tracer")
-st.caption("Free Unlimited AI Assistant — Founded by Aman Chauhan")
+# 2. Hide Streamlit Branding (Hamburger menu, Footer, and Deploy button)
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .viewerBadge_container__1QSob {display: none;}
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+# 3. Your App Branding & Header
+col1, col2 = st.columns([1, 5])
+with col1:
+    # If you upload a logo.png, replace the markdown below with: st.image("logo.png", width=70)
+    st.markdown("<h1 style='text-align: center; font-size: 50px; margin: 0;'>⚡</h1>", unsafe_allow_html=True)
+with col2:
+    st.title("AI of Tracer")
+    st.caption("Official AI Assistant — Created & Founded by Aman Chauhan")
 
 # Your Groq API key
 GROQ_API_KEY = "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"
@@ -35,13 +57,16 @@ def get_best_model():
 
 ACTIVE_MODEL = get_best_model()
 
-# --- Sidebar: Camera Feature ---
+# --- Sidebar: Visual Input & Profile ---
 with st.sidebar:
     st.header("📸 Visual Input")
     captured_img = st.camera_input("Take a photo")
     if captured_img:
         st.success("Photo captured! (Tracer Vision)")
-    st.info("💡 **Voice Tip:** Use the mic icon on your phone or keyboard (Gboard) to talk directly to Tracer!")
+    st.divider()
+    st.markdown("**App:** AI of Tracer")
+    st.markdown("**Founder & Owner:** Aman Chauhan")
+    st.info("💡 **Voice Tip:** Use the mic icon on your mobile Gboard keyboard to talk directly!")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
