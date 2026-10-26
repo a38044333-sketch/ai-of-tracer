@@ -1,10 +1,10 @@
 import streamlit as st
 from groq import Groq
 
-# 1. Custom Tab Title & Icon
+# 1. Custom Tab Title & Custom Logo Favicon
 st.set_page_config(
     page_title="AI of Tracer",
-    page_icon="⚡",
+    page_icon="logo.png",
     layout="centered",
     initial_sidebar_state="collapsed"
 )
@@ -30,7 +30,7 @@ hide_streamlit_style = """
     .app-title {
         font-size: 2.2rem;
         font-weight: 800;
-        margin-bottom: 0px;
+        margin: 0;
         color: #ffffff;
     }
     .app-subtitle {
@@ -42,9 +42,19 @@ hide_streamlit_style = """
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-# 3. Your App Branding & Header
-st.markdown('<div class="app-title">⚡ AI of Tracer</div>', unsafe_allow_html=True)
-st.markdown('<div class="app-subtitle">Official AI Assistant — Created & Founded by <b>Aman Chauhan</b></div>', unsafe_allow_html=True)
+# 3. Header Branding with your Robot Logo
+col1, col2 = st.columns([1, 4])
+with col1:
+    try:
+        st.image("logo.png", width=75)
+    except Exception:
+        try:
+            st.image("logo.png.png", width=75)
+        except Exception:
+            st.markdown("<h1 style='text-align: center; font-size: 50px; margin: 0;'>⚡</h1>", unsafe_allow_html=True)
+with col2:
+    st.markdown('<div class="app-title">AI of Tracer</div>', unsafe_allow_html=True)
+    st.markdown('<div class="app-subtitle">Official AI Assistant — Founded by <b>Aman Chauhan</b></div>', unsafe_allow_html=True)
 
 # Your Groq API key
 GROQ_API_KEY = "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"
