@@ -8,19 +8,26 @@ st.set_page_config(page_title="AI of Tracer", page_icon="⚡", layout="centered"
 st.title("⚡ AI of Tracer")
 st.caption("Free Unlimited AI Assistant — Founded by Aman Chauhan")
 
-# 1. API Key handling (reads from Streamlit Secrets or fallback)
-GROQ_API_KEY = st.secrets.get("GROQ_API_KEY", "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")
-client = Groq(api_key=GROQ_API_KEY)
+# Retrieve Groq API Key securely from secrets or environment variables
+api_key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
 
-# 2. Model Selection
+if not api_key:
+    st.warning("Please add your `GROQ_API_KEY` to Streamlit Secrets to enable chat.")
+    client = None
+else:
+    client = Groq(api_key=api_key)
+
+# Dynamic Model Selection
 @st.cache_resource
-def get_best_model():
+def get_best_model(_client):
+    if not _client:
+        return "llama-3.3-70b-versatile"
     try:
-        model_list = [m.id for m in client.models.list().data]
+        model_list = [m.id for m in _client.models.list().data]
         preferred = [
             "llama-3.3-70b-versatile",
             "llama-3.1-8b-instant",
-            "mixtral-8x7b-32768"
+            "mixtral-8x7b-32768",
         ]
         for name in preferred:
             if name in model_list:
@@ -32,88 +39,88 @@ def get_best_model():
         pass
     return "llama-3.3-70b-versatile"
 
-ACTIVE_MODEL = get_best_model()
+ACTIVE_MODEL = get_best_model(client)
 
-# 3. Initialize Session States
+# Initialize Session State
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
 if "last_voice_prompt" not in st.session_state:
     st.session_state.last_voice_prompt = None
 
-# --- Sidebar: Camera & Voice Tools ---
+# Sidebar: Camera & Voice Tools
 with st.sidebar:
     st.header("📸 Visual & Audio Input")
-    
+
     captured_img = st.camera_input("Take a photo")
     if captured_img:
         st.success("Photo captured! (Tracer Vision)")
-    
+
     st.write("🎙️ **Voice Input:**")
     voice_prompt = speech_to_text(
         language="en",
         start_prompt="Tap to Speak",
         stop_prompt="Stop Recording",
         just_once=True,
-        key="voice_input"
+        key="voice_input",
     )
 
-# --- Chat History ---
+# Display Chat History
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# --- Determine User Input ---
+# Collect Input from Chat Bar or Microphone
 text_input = st.chat_input("Ask anything...")
 user_query = None
 
-# Priority: typed text first
 if text_input:
     user_query = text_input
-# Handle voice only when it is new
 elif voice_prompt and voice_prompt != st.session_state.last_voice_prompt:
     user_query = voice_prompt
     st.session_state.last_voice_prompt = voice_prompt
 
-# --- Model Response Execution ---
+# Process and Stream AI Response
 if user_query:
     st.session_state.messages.append({"role": "user", "content": user_query})
     with st.chat_message("user"):
         st.markdown(user_query)
 
     with st.chat_message("assistant"):
-        try:
-            # Build conversation history payload
-            system_instruction = {
-                "role": "system",
-                "content": (
-                    "You are AI of Tracer, an intelligent and fast AI assistant. "
-                    "Your founder, creator, and owner is Aman Chauhan. "
-                    "Whenever anyone asks who created you, who made you, who owns you, "
-                    "or who your founder is, always state clearly that you were created "
-                    "and founded by Aman Chauhan."
-                ),
-            }
-            
-            chat_payload = [system_instruction] + [
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ]
+        if not client:
+            st.error("GROQ_API_KEY is not configured.")
+        else:
+            try:
+                system_instruction = {
+                    "role": "system",
+                    "content": (
+                        "You are AI of Tracer, an intelligent and fast AI assistant. "
+                        "Your founder, creator, and owner is Aman Chauhan. "
+                        "Whenever anyone asks who created you, who made you, who owns you, "
+                        "or who your founder is, always state clearly that you were created "
+                        "and founded by Aman Chauhan."
+                    ),
+                }
 
-            stream = client.chat.completions.create(
-                messages=chat_payload,
-                model=ACTIVE_MODEL,
-                stream=True,
-            )
+                chat_payload = [system_instruction] + [
+                    {"role": m["role"], "content": m["content"]}
+                    for m in st.session_state.messages
+                ]
 
-            def generate_chunks():
-                for chunk in stream:
-                    content = chunk.choices[0].delta.content
-                    if content:
-                        yield content
+                stream = client.chat.completions.create(
+                    messages=chat_payload,
+                    model=ACTIVE_MODEL,
+                    stream=True,
+                )
 
-            bot_reply = st.write_stream(generate_chunks)
-            st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+                def generate_chunks():
+                    for chunk in stream:
+                        content = chunk.choices[0].delta.content
+                        if content:
+                            yield content
 
-        except Exception as e:
-            st.error(f"Error: {e}")
+                bot_reply = st.write_stream(generate_chunks)
+                st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+
+            except Exception as e:
+                st.error(f"Error: {e}")
