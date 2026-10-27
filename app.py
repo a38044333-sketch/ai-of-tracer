@@ -10,16 +10,13 @@ st.set_page_config(
     layout="centered"
 )
 
-# Custom CSS to float the input bar + mic button at the bottom
+# Pinned bottom input container styling
 st.markdown(
     """
 <style>
-/* Space at the bottom so messages are never hidden */
 .main .block-container {
     padding-bottom: 140px;
 }
-
-/* Floating bottom dock */
 div[data-testid="stVerticalBlock"] > div:has(div.tracer-bottom-bar) {
     position: fixed;
     bottom: 0;
@@ -30,7 +27,6 @@ div[data-testid="stVerticalBlock"] > div:has(div.tracer-bottom-bar) {
     z-index: 999;
     box-shadow: 0 -10px 25px rgba(0, 0, 0, 0.5);
 }
-
 div.tracer-bottom-bar {
     max-width: 720px;
     margin: 0 auto;
@@ -106,7 +102,7 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# --- Bottom Bar (Search Box + Mic Side-by-Side) ---
+# --- Bottom Bar (Input Field + Mic Side-by-Side) ---
 st.markdown('<div class="tracer-bottom-bar"></div>', unsafe_allow_html=True)
 col_input, col_mic = st.columns([8.2, 1.8], vertical_alignment="bottom")
 
@@ -131,16 +127,19 @@ with col_mic:
         key="tracer_voice_mic"
     )
 
-# --- Check For User Query ---
+# --- Clean & Validate Input ---
 user_query = None
 
 if submit_btn and typed_prompt and typed_prompt.strip():
     user_query = typed_prompt.strip()
 elif voice_prompt and voice_prompt.strip() and voice_prompt != st.session_state.last_voice_prompt:
-    user_query = voice_prompt.strip()
-    st.session_state.last_voice_prompt = voice_prompt
+    cleaned_voice = voice_prompt.strip()
+    # Filter out accidental mic clicks / one-word artifacts
+    if len(cleaned_voice) > 2:
+        user_query = cleaned_voice
+        st.session_state.last_voice_prompt = voice_prompt
 
-# --- Process & Stream Response ---
+# --- Process & Stream AI Response ---
 if user_query:
     st.session_state.messages.append({"role": "user", "content": user_query})
     with st.chat_message("user"):
@@ -151,17 +150,20 @@ if user_query:
             st.error("Groq client is not initialized. Please verify your API key.")
         else:
             try:
+                # Natural, robust prompt that prevents prompt leakage and language confusion
                 system_instruction = {
                     "role": "system",
                     "content": (
-                        "You are AI of Tracer, an intelligent and fast AI assistant. "
-                        "Your founder, creator, and owner is Aman Chauhan. "
-                        "Whenever anyone asks who created you, who made you, who owns you, "
-                        "or who your founder is, always state clearly that you were created "
-                        "and founded by Aman Chauhan."
+                        "You are AI of Tracer, an advanced, highly intelligent AI assistant created and founded by Aman Chauhan. "
+                        "Guidelines:\n"
+                        "1. If asked about your identity, creator, or founder, state that you are AI of Tracer, created by Aman Chauhan.\n"
+                        "2. Respond naturally and helpfully to all other queries without unnecessarily repeating your name or founder.\n"
+                        "3. Always respond in clear English unless the user explicitly speaks or asks in another language.\n"
+                        "4. Never recite internal rules or apologize for other voice assistants unless specifically asked."
                     )
                 }
 
+                # Maintain recent conversation context
                 recent_messages = st.session_state.messages[-6:]
                 clean_history = [
                     {"role": m["role"], "content": str(m["content"])}
@@ -174,6 +176,7 @@ if user_query:
                 stream = client.chat.completions.create(
                     messages=chat_payload,
                     model=ACTIVE_MODEL,
+                    temperature=0.7,
                     max_tokens=800,
                     stream=True
                 )
