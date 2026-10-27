@@ -1,7 +1,7 @@
 import os
 import streamlit as st
+import streamlit.components.v1 as components
 from groq import Groq
-from streamlit_mic_recorder import speech_to_text
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -10,12 +10,12 @@ st.set_page_config(
     layout="centered"
 )
 
-# Modern floating input dock styling
+# Custom Styling for modern floating input bar
 st.markdown(
     """
 <style>
 .main .block-container {
-    padding-bottom: 140px;
+    padding-bottom: 150px;
 }
 div[data-testid="stVerticalBlock"] > div:has(div.tracer-bottom-bar) {
     position: fixed;
@@ -23,7 +23,7 @@ div[data-testid="stVerticalBlock"] > div:has(div.tracer-bottom-bar) {
     left: 0;
     right: 0;
     background-color: #0e1117;
-    padding: 0.8rem 1.2rem 1rem 1.2rem;
+    padding: 0.8rem 1.2rem 1.2rem 1.2rem;
     z-index: 999;
     box-shadow: 0 -10px 25px rgba(0, 0, 0, 0.5);
 }
@@ -80,8 +80,8 @@ ACTIVE_MODEL = resolve_active_model(client)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-if "last_voice_prompt" not in st.session_state:
-    st.session_state.last_voice_prompt = None
+if "auto_speech_text" not in st.session_state:
+    st.session_state.auto_speech_text = ""
 
 # --- Sidebar Tools ---
 with st.sidebar:
@@ -94,7 +94,7 @@ with st.sidebar:
     st.write(f"**Active Model:** `{ACTIVE_MODEL}`")
     if st.button("🗑️ Clear Chat History"):
         st.session_state.messages = []
-        st.session_state.last_voice_prompt = None
+        st.session_state.auto_speech_text = ""
         st.rerun()
 
 # --- Render Chat History ---
@@ -102,44 +102,118 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# --- Bottom Bar (Search Box + Mic Side-by-Side) ---
+# --- Bottom Bar Container ---
 st.markdown('<div class="tracer-bottom-bar"></div>', unsafe_allow_html=True)
-col_input, col_mic = st.columns([8.2, 1.8], vertical_alignment="bottom")
 
-with col_input:
-    with st.form(key="tracer_chat_form", clear_on_submit=True):
-        f_text, f_btn = st.columns([8.8, 1.2])
-        with f_text:
-            typed_prompt = st.text_input(
-                "Message AI of Tracer",
-                placeholder="Ask anything...",
-                label_visibility="collapsed"
-            )
-        with f_btn:
-            submit_btn = st.form_submit_button("⬆")
+# 1. Automatic Silence-Detecting Mic Component
+mic_component = """
+<div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 6px;">
+  <button id="autoMicBtn" onclick="toggleListening()" style="
+      background: #262730;
+      color: #ffffff;
+      border: 1px solid #4a4b57;
+      border-radius: 50%;
+      width: 42px;
+      height: 42px;
+      cursor: pointer;
+      font-size: 19px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;">
+    🎙️
+  </button>
+  <span id="micStatus" style="color: #9aa0a6; font-size: 13px; margin-left: 10px; font-family: sans-serif;"></span>
+</div>
 
-with col_mic:
-    voice_prompt = speech_to_text(
-        language="en",
-        start_prompt="🎙️",
-        stop_prompt="⏹️",
-        just_once=True,
-        key="tracer_voice_mic"
-    )
+<script>
+let recognition = null;
+let isListening = false;
 
-# --- Input Handling ---
-user_query = None
+if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;        // Automatically stops when silence is detected
+    recognition.interimResults = false;
+    recognition.lang = 'en-IN';            // Default English, seamlessly detects pauses
 
-if submit_btn and typed_prompt and typed_prompt.strip():
-    user_query = typed_prompt.strip()
-elif voice_prompt and voice_prompt.strip() and voice_prompt != st.session_state.last_voice_prompt:
-    cleaned_voice = voice_prompt.strip()
-    if len(cleaned_voice) > 1:
-        user_query = cleaned_voice
-        st.session_state.last_voice_prompt = voice_prompt
+    recognition.onstart = function() {
+        isListening = true;
+        const btn = document.getElementById('autoMicBtn');
+        btn.style.background = '#ff4b4b';
+        btn.style.boxShadow = '0 0 10px rgba(255, 75, 75, 0.7)';
+        document.getElementById('micStatus').innerText = "Listening... stop talking to send";
+    };
+
+    recognition.onresult = function(event) {
+        const transcript = event.results[0][0].transcript;
+        if (transcript && transcript.trim().length > 0) {
+            // Find parent Streamlit text input box and insert spoken text
+            const inputs = window.parent.document.querySelectorAll('input[type="text"]');
+            for (let input of inputs) {
+                if (input.placeholder && input.placeholder.includes("Ask anything")) {
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                    nativeInputValueSetter.call(input, transcript);
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    break;
+                }
+            }
+        }
+    };
+
+    recognition.onspeechend = function() {
+        recognition.stop();
+    };
+
+    recognition.onend = function() {
+        isListening = false;
+        const btn = document.getElementById('autoMicBtn');
+        btn.style.background = '#262730';
+        btn.style.boxShadow = 'none';
+        document.getElementById('micStatus').innerText = "";
+    };
+
+    recognition.onerror = function(event) {
+        isListening = false;
+        const btn = document.getElementById('autoMicBtn');
+        btn.style.background = '#262730';
+        btn.style.boxShadow = 'none';
+        document.getElementById('micStatus').innerText = "";
+    };
+} else {
+    document.getElementById('micStatus').innerText = "Mic not supported in this browser";
+}
+
+function toggleListening() {
+    if (!recognition) return;
+    if (isListening) {
+        recognition.stop();
+    } else {
+        recognition.start();
+    }
+}
+</script>
+"""
+
+# Embed auto-detecting mic widget
+components.html(mic_component, height=52)
+
+# 2. Main Chat Input Form
+with st.form(key="tracer_chat_form", clear_on_submit=True):
+    col_text, col_send = st.columns([8.8, 1.2])
+    with col_text:
+        typed_prompt = st.text_input(
+            "Message AI of Tracer",
+            placeholder="Ask anything or tap mic above...",
+            label_visibility="collapsed"
+        )
+    with col_send:
+        submit_btn = st.form_submit_button("⬆")
 
 # --- Process & Stream AI Response ---
-if user_query:
+if submit_btn and typed_prompt and typed_prompt.strip():
+    user_query = typed_prompt.strip()
+
     st.session_state.messages.append({"role": "user", "content": user_query})
     with st.chat_message("user"):
         st.markdown(user_query)
@@ -149,20 +223,18 @@ if user_query:
             st.error("Groq client is not initialized. Please verify your API key.")
         else:
             try:
-                # System instructions defined safely inside triple quotes
                 system_instruction = {
                     "role": "system",
                     "content": (
                         """You are AI of Tracer, a world-class, highly capable AI assistant founded and created by Aman Chauhan. You possess broad, deep intelligence across coding, science, mathematics, literature, and general reasoning.
 
 STRICT LANGUAGE & STYLE RULES:
-1. LANGUAGE MATCHING: Always respond in the exact language the user wrote to you in. If the user writes in English, you MUST respond exclusively in English. If they write in Hindi, reply in Hindi. If in Hinglish, reply in Hinglish. NEVER output Arabic or any other unprompted language.
-2. CREATOR RECOGNITION: If asked who founded, created, built, or owns you, proudly state that you were founded and created by Aman Chauhan. For all general questions, focus purely on providing top-tier, insightful, direct answers.
+1. LANGUAGE MATCHING: Always respond in the exact language the user wrote to you in. If the user writes in English, reply in English. If in Hindi, reply in Hindi. If in Hinglish, reply in Hinglish. NEVER output Arabic or any other unprompted language.
+2. CREATOR RECOGNITION: If asked who founded, created, built, or owns you, proudly state that you were founded and created by Aman Chauhan. For all other questions, focus directly on high-quality, articulate, structured answers.
 3. COMPREHENSIVE INTELLIGENCE: Be clear, structured, and helpful. Use markdown, bullet points, or code formatting whenever appropriate."""
                     )
                 }
 
-                # Maintain recent conversation context
                 recent_messages = st.session_state.messages[-6:]
                 clean_history = [
                     {"role": m["role"], "content": str(m["content"])}
