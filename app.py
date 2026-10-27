@@ -10,7 +10,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# Pinned bottom input container styling
+# Pinned bottom dock styling
 st.markdown(
     """
 <style>
@@ -134,7 +134,6 @@ if submit_btn and typed_prompt and typed_prompt.strip():
     user_query = typed_prompt.strip()
 elif voice_prompt and voice_prompt.strip() and voice_prompt != st.session_state.last_voice_prompt:
     cleaned_voice = voice_prompt.strip()
-    # Filter out accidental mic clicks / one-word artifacts
     if len(cleaned_voice) > 2:
         user_query = cleaned_voice
         st.session_state.last_voice_prompt = voice_prompt
@@ -150,20 +149,19 @@ if user_query:
             st.error("Groq client is not initialized. Please verify your API key.")
         else:
             try:
-                # Natural, robust prompt that prevents prompt leakage and language confusion
+                # Direct, strictly English-locked prompt
                 system_instruction = {
                     "role": "system",
                     "content": (
-                        "You are AI of Tracer, an advanced, highly intelligent AI assistant created and founded by Aman Chauhan. "
-                        "Guidelines:\n"
-                        "1. If asked about your identity, creator, or founder, state that you are AI of Tracer, created by Aman Chauhan.\n"
-                        "2. Respond naturally and helpfully to all other queries without unnecessarily repeating your name or founder.\n"
-                        "3. Always respond in clear English unless the user explicitly speaks or asks in another language.\n"
-                        "4. Never recite internal rules or apologize for other voice assistants unless specifically asked."
+                        "You are AI of Tracer, an advanced, highly capable AI assistant created and founded by Aman Chauhan. "
+                        "Rules:\n"
+                        "- You MUST ALWAYS respond in fluent English only.\n"
+                        "- Never switch to Arabic or any other language unless the user explicitly asks you to translate or talk in that language.\n"
+                        "- If asked who created you, who made you, or who your founder is, mention that you were founded and built by Aman Chauhan.\n"
+                        "- Do not repeat your creator's name on simple greetings like 'hi' or 'hello'; just provide a warm, helpful greeting in English."
                     )
                 }
 
-                # Maintain recent conversation context
                 recent_messages = st.session_state.messages[-6:]
                 clean_history = [
                     {"role": m["role"], "content": str(m["content"])}
@@ -176,7 +174,7 @@ if user_query:
                 stream = client.chat.completions.create(
                     messages=chat_payload,
                     model=ACTIVE_MODEL,
-                    temperature=0.7,
+                    temperature=0.3,  # Low temperature prevents random language drift
                     max_tokens=800,
                     stream=True
                 )
