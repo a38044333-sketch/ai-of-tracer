@@ -1,7 +1,7 @@
 import os
 import streamlit as st
-import streamlit.components.v1 as components
 from groq import Groq
+from streamlit_mic_recorder import speech_to_text
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -80,6 +80,9 @@ ACTIVE_MODEL = resolve_active_model(client)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+if "last_voice_prompt" not in st.session_state:
+    st.session_state.last_voice_prompt = None
+
 # --- Sidebar Tools ---
 with st.sidebar:
     st.header("📸 Visual Input")
@@ -91,6 +94,7 @@ with st.sidebar:
     st.write(f"**Active Model:** `{ACTIVE_MODEL}`")
     if st.button("🗑️ Clear Chat History"):
         st.session_state.messages = []
+        st.session_state.last_voice_prompt = None
         st.rerun()
 
 # --- Render Chat History ---
@@ -98,104 +102,89 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# --- Bottom Bar Container ---
+# --- Bottom Bar (Search Box + Mic Side-by-Side) ---
 st.markdown('<div class="tracer-bottom-bar"></div>', unsafe_allow_html=True)
+col_input, col_mic = st.columns([8.2, 1.8], vertical_alignment="bottom")
 
-# Mobile-Compatible Web Speech Mic Component
-mic_component = """
-<div style="display: flex; align-items: center; justify-content: flex-end; margin-bottom: 8px;">
-  <button id="mobileMicBtn" type="button" style="
-      background: #262730;
-      color: #ffffff;
-      border: 1px solid #4a4b57;
-      border-radius: 50%;
-      width: 44px;
-      height: 44px;
-      cursor: pointer;
-      font-size: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      touch-action: manipulation;
-      transition: all 0.2s ease;">
-    🎙️
-  </button>
-  <span id="micStatus" style="color: #9aa0a6; font-size: 13px; margin-left: 10px; font-family: sans-serif;"></span>
-</div>
+with col_input:
+    with st.form(key="tracer_chat_form", clear_on_submit=True):
+        f_text, f_btn = st.columns([8.8, 1.2])
+        with f_text:
+            typed_prompt = st.text_input(
+                "Message AI of Tracer",
+                placeholder="Ask anything...",
+                label_visibility="collapsed"
+            )
+        with f_btn:
+            submit_btn = st.form_submit_button("⬆")
 
-<script>
-let recognition = null;
-let isRecording = false;
+with col_mic:
+    voice_prompt = speech_to_text(
+        language="en",
+        start_prompt="🎙️",
+        stop_prompt="⏹️",
+        just_once=True,
+        key="tracer_voice_mic"
+    )
 
-const SpeechAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+# --- Check For User Query ---
+user_query = None
 
-if (SpeechAPI) {
-    recognition = new SpeechAPI();
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = 'en-US';
+if submit_btn and typed_prompt and typed_prompt.strip():
+    user_query = typed_prompt.strip()
+elif voice_prompt and voice_prompt.strip() and voice_prompt != st.session_state.last_voice_prompt:
+    user_query = voice_prompt.strip()
+    st.session_state.last_voice_prompt = voice_prompt
 
-    const btn = document.getElementById('mobileMicBtn');
-    const status = document.getElementById('micStatus');
+# --- Process & Stream AI Response ---
+if user_query:
+    st.session_state.messages.append({"role": "user", "content": user_query})
+    with st.chat_message("user"):
+        st.markdown(user_query)
 
-    recognition.onstart = function() {
-        isRecording = true;
-        btn.style.background = '#ff4b4b';
-        btn.style.boxShadow = '0 0 12px rgba(255, 75, 75, 0.8)';
-        status.innerText = "Listening... Speak now";
-    };
-
-    recognition.onresult = function(event) {
-        const text = event.results[0][0].transcript;
-        if (text && text.trim().length > 0) {
-            status.innerText = "Transcribing...";
-            try {
-                // Find Streamlit parent input field and insert text
-                const parentDoc = window.parent.document;
-                const textInputs = parentDoc.querySelectorAll('input[type="text"]');
-                for (let input of textInputs) {
-                    if (input.placeholder && input.placeholder.includes("Ask anything")) {
-                        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                        setter.call(input, text);
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        
-                        // Automatically submit form if submit button exists
-                        setTimeout(() => {
-                            const submitBtn = parentDoc.querySelector('button[kind="secondaryFormSubmit"]');
-                            if (submitBtn) {
-                                submitBtn.click();
-                            }
-                        }, 200);
-                        break;
-                    }
+    with st.chat_message("assistant"):
+        if not client:
+            st.error("Groq client is not initialized. Please verify your API key.")
+        else:
+            try:
+                system_instruction = {
+                    "role": "system",
+                    "content": (
+                        "You are AI of Tracer, an advanced AI assistant created and founded by Aman Chauhan.\n\n"
+                        "STRICT RULES:\n"
+                        "1. LANGUAGE: Respond in the exact language the user used (default to English). NEVER output Arabic or any other language unless explicitly requested.\n"
+                        "2. CREATOR: If asked who created, founded, or owns you, state that you were founded and built by Aman Chauhan. For ordinary questions, answer directly and helpfully without mentioning your creator.\n"
+                        "3. QUALITY: Provide clear, accurate, and structured answers using markdown formatting."
+                    )
                 }
-            } catch(e) {
-                status.innerText = "Tap input to paste";
-            }
-        }
-    };
 
-    recognition.onspeechend = function() {
-        recognition.stop();
-    };
+                # Maintain history and purge any past Arabic tokens
+                recent_messages = st.session_state.messages[-6:]
+                clean_history = []
+                for m in recent_messages:
+                    content_str = str(m.get("content", "")).strip()
+                    # Strip any Arabic characters (\u0600-\u06FF) from history to prevent contamination
+                    if content_str and not any('\u0600' <= char <= '\u06ff' for char in content_str):
+                        clean_history.append({"role": m["role"], "content": content_str})
 
-    recognition.onend = function() {
-        isRecording = false;
-        btn.style.background = '#262730';
-        btn.style.boxShadow = 'none';
-        status.innerText = "";
-    };
+                chat_payload = [system_instruction] + clean_history
 
-    recognition.onerror = function(event) {
-        isRecording = false;
-        btn.style.background = '#262730';
-        btn.style.boxShadow = 'none';
-        if (event.error === 'not-allowed') {
-            status.innerText = "Allow Mic permission in browser settings";
-        } else {
-            status.innerText = "No speech heard. Try again.";
-        }
-    };
+                stream = client.chat.completions.create(
+                    messages=chat_payload,
+                    model=ACTIVE_MODEL,
+                    temperature=0.3,
+                    max_tokens=800,
+                    stream=True
+                )
 
-    btn.addEventListener('click', function(e) {
-        e.preventDefault();
+                def generate_chunks():
+                    for chunk in stream:
+                        content = chunk.choices[0].delta.content
+                        if content:
+                            yield content
+
+                bot_reply = st.write_stream(generate_chunks)
+                st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+
+            except Exception as e:
+                st.error(f"Groq API Error: {e}")
