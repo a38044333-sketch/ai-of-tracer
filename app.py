@@ -10,7 +10,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# Pinned bottom dock styling
+# Modern floating input dock styling
 st.markdown(
     """
 <style>
@@ -102,7 +102,7 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# --- Bottom Bar (Input Field + Mic Side-by-Side) ---
+# --- Bottom Bar (Search Box + Mic Side-by-Side) ---
 st.markdown('<div class="tracer-bottom-bar"></div>', unsafe_allow_html=True)
 col_input, col_mic = st.columns([8.2, 1.8], vertical_alignment="bottom")
 
@@ -127,14 +127,14 @@ with col_mic:
         key="tracer_voice_mic"
     )
 
-# --- Clean & Validate Input ---
+# --- Input Handling ---
 user_query = None
 
 if submit_btn and typed_prompt and typed_prompt.strip():
     user_query = typed_prompt.strip()
 elif voice_prompt and voice_prompt.strip() and voice_prompt != st.session_state.last_voice_prompt:
     cleaned_voice = voice_prompt.strip()
-    if len(cleaned_voice) > 2:
+    if len(cleaned_voice) > 1:
         user_query = cleaned_voice
         st.session_state.last_voice_prompt = voice_prompt
 
@@ -149,44 +149,9 @@ if user_query:
             st.error("Groq client is not initialized. Please verify your API key.")
         else:
             try:
-                # Direct, strictly English-locked prompt
+                # Upgraded Master System Prompt
                 system_instruction = {
                     "role": "system",
                     "content": (
-                        "You are AI of Tracer, an advanced, highly capable AI assistant created and founded by Aman Chauhan. "
-                        "Rules:\n"
-                        "- You MUST ALWAYS respond in fluent English only.\n"
-                        "- Never switch to Arabic or any other language unless the user explicitly asks you to translate or talk in that language.\n"
-                        "- If asked who created you, who made you, or who your founder is, mention that you were founded and built by Aman Chauhan.\n"
-                        "- Do not repeat your creator's name on simple greetings like 'hi' or 'hello'; just provide a warm, helpful greeting in English."
-                    )
-                }
-
-                recent_messages = st.session_state.messages[-6:]
-                clean_history = [
-                    {"role": m["role"], "content": str(m["content"])}
-                    for m in recent_messages
-                    if m.get("content") and str(m["content"]).strip()
-                ]
-
-                chat_payload = [system_instruction] + clean_history
-
-                stream = client.chat.completions.create(
-                    messages=chat_payload,
-                    model=ACTIVE_MODEL,
-                    temperature=0.3,  # Low temperature prevents random language drift
-                    max_tokens=800,
-                    stream=True
-                )
-
-                def generate_chunks():
-                    for chunk in stream:
-                        content = chunk.choices[0].delta.content
-                        if content:
-                            yield content
-
-                bot_reply = st.write_stream(generate_chunks)
-                st.session_state.messages.append({"role": "assistant", "content": bot_reply})
-
-            except Exception as e:
-                st.error(f"Groq API Error: {e}")
+                        "You are AI of Tracer, a world-class, highly capable AI assistant founded and created by Aman Chauhan. "
+                        "You possess broad, deep
