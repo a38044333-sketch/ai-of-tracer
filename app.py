@@ -24,8 +24,39 @@ if GROQ_API_KEY:
     except Exception as e:
         st.error(f"Failed to initialize Groq client: {e}")
 
-# Stable, actively supported Groq models
-MODEL_CHOICE = "llama-3.1-8b-instant"
+# --- Dynamic Model Resolver (Prevents 404 Model Not Found) ---
+@st.cache_resource
+def resolve_active_model(_client):
+    if not _client:
+        return "llama3-8b-8192"
+    try:
+        # Fetch current models directly supported by your key
+        available_models = [m.id for m in _client.models.list().data]
+        
+        # Priority fallback preference
+        preferred_models = [
+            "llama-3.3-70b-versatile",
+            "llama-3.1-8b-instant",
+            "llama3-70b-8192",
+            "llama3-8b-8192",
+            "mixtral-8x7b-32768",
+            "gemma2-9b-it"
+        ]
+        
+        for pref in preferred_models:
+            if pref in available_models:
+                return pref
+        
+        # Fallback to the first non-whisper, non-guard chat model available
+        for m in available_models:
+            if "whisper" not in m and "guard" not in m and "vision" not in m:
+                return m
+    except Exception:
+        pass
+    
+    return "llama3-8b-8192"
+
+ACTIVE_MODEL = resolve_active_model(client)
 
 # --- State Management ---
 if "messages" not in st.session_state:
@@ -52,7 +83,7 @@ with st.sidebar:
     )
 
     st.markdown("---")
-    st.write(f"**Model:** `{MODEL_CHOICE}`")
+    st.write(f"**Active Model:** `{ACTIVE_MODEL}`")
     if st.button("🗑️ Clear Chat History"):
         st.session_state.messages = []
         st.session_state.last_voice_prompt = None
@@ -63,7 +94,7 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# --- Capture Input ---
+# --- Capture Input (Chat Box or Microphone) ---
 text_input = st.chat_input("Ask anything...")
 user_query = None
 
@@ -95,7 +126,7 @@ if user_query:
                     ),
                 }
 
-                # Sanitize messages: ensure no empty strings or corrupt objects are sent
+                # Ensure only clean, non-empty text strings are sent
                 clean_history = [
                     {"role": m["role"], "content": str(m["content"])}
                     for m in st.session_state.messages
@@ -106,7 +137,7 @@ if user_query:
 
                 stream = client.chat.completions.create(
                     messages=chat_payload,
-                    model=MODEL_CHOICE,
+                    model=ACTIVE_MODEL,
                     stream=True,
                 )
 
@@ -120,5 +151,4 @@ if user_query:
                 st.session_state.messages.append({"role": "assistant", "content": bot_reply})
 
             except Exception as e:
-                # Displays the exact reason Groq rejected the payload
                 st.error(f"Groq API Error: {e}")
