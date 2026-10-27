@@ -10,7 +10,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# Custom Styling for modern floating input bar
+# Custom Styling for modern floating bottom dock
 st.markdown(
     """
 <style>
@@ -80,9 +80,6 @@ ACTIVE_MODEL = resolve_active_model(client)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-if "auto_speech_text" not in st.session_state:
-    st.session_state.auto_speech_text = ""
-
 # --- Sidebar Tools ---
 with st.sidebar:
     st.header("📸 Visual Input")
@@ -94,7 +91,6 @@ with st.sidebar:
     st.write(f"**Active Model:** `{ACTIVE_MODEL}`")
     if st.button("🗑️ Clear Chat History"):
         st.session_state.messages = []
-        st.session_state.auto_speech_text = ""
         st.rerun()
 
 # --- Render Chat History ---
@@ -105,21 +101,22 @@ for msg in st.session_state.messages:
 # --- Bottom Bar Container ---
 st.markdown('<div class="tracer-bottom-bar"></div>', unsafe_allow_html=True)
 
-# 1. Automatic Silence-Detecting Mic Component
+# Mobile-Compatible Web Speech Mic Component
 mic_component = """
-<div style="display: flex; justify-content: flex-end; align-items: center; margin-bottom: 6px;">
-  <button id="autoMicBtn" onclick="toggleListening()" style="
+<div style="display: flex; align-items: center; justify-content: flex-end; margin-bottom: 8px;">
+  <button id="mobileMicBtn" type="button" style="
       background: #262730;
       color: #ffffff;
       border: 1px solid #4a4b57;
       border-radius: 50%;
-      width: 42px;
-      height: 42px;
+      width: 44px;
+      height: 44px;
       cursor: pointer;
-      font-size: 19px;
+      font-size: 20px;
       display: flex;
       align-items: center;
       justify-content: center;
+      touch-action: manipulation;
       transition: all 0.2s ease;">
     🎙️
   </button>
@@ -128,35 +125,52 @@ mic_component = """
 
 <script>
 let recognition = null;
-let isListening = false;
+let isRecording = false;
 
-if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    recognition = new SpeechRecognition();
-    recognition.continuous = false;        // Automatically stops when silence is detected
+const SpeechAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+if (SpeechAPI) {
+    recognition = new SpeechAPI();
+    recognition.continuous = false;
     recognition.interimResults = false;
-    recognition.lang = 'en-IN';            // Default English, seamlessly detects pauses
+    recognition.lang = 'en-US';
+
+    const btn = document.getElementById('mobileMicBtn');
+    const status = document.getElementById('micStatus');
 
     recognition.onstart = function() {
-        isListening = true;
-        const btn = document.getElementById('autoMicBtn');
+        isRecording = true;
         btn.style.background = '#ff4b4b';
-        btn.style.boxShadow = '0 0 10px rgba(255, 75, 75, 0.7)';
-        document.getElementById('micStatus').innerText = "Listening... stop talking to send";
+        btn.style.boxShadow = '0 0 12px rgba(255, 75, 75, 0.8)';
+        status.innerText = "Listening... Speak now";
     };
 
     recognition.onresult = function(event) {
-        const transcript = event.results[0][0].transcript;
-        if (transcript && transcript.trim().length > 0) {
-            // Find parent Streamlit text input box and insert spoken text
-            const inputs = window.parent.document.querySelectorAll('input[type="text"]');
-            for (let input of inputs) {
-                if (input.placeholder && input.placeholder.includes("Ask anything")) {
-                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
-                    nativeInputValueSetter.call(input, transcript);
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                    break;
+        const text = event.results[0][0].transcript;
+        if (text && text.trim().length > 0) {
+            status.innerText = "Transcribing...";
+            try {
+                // Find Streamlit parent input field and insert text
+                const parentDoc = window.parent.document;
+                const textInputs = parentDoc.querySelectorAll('input[type="text"]');
+                for (let input of textInputs) {
+                    if (input.placeholder && input.placeholder.includes("Ask anything")) {
+                        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                        setter.call(input, text);
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        
+                        // Automatically submit form if submit button exists
+                        setTimeout(() => {
+                            const submitBtn = parentDoc.querySelector('button[kind="secondaryFormSubmit"]');
+                            if (submitBtn) {
+                                submitBtn.click();
+                            }
+                        }, 200);
+                        break;
+                    }
                 }
+            } catch(e) {
+                status.innerText = "Tap input to paste";
             }
         }
     };
@@ -166,100 +180,22 @@ if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
     };
 
     recognition.onend = function() {
-        isListening = false;
-        const btn = document.getElementById('autoMicBtn');
+        isRecording = false;
         btn.style.background = '#262730';
         btn.style.boxShadow = 'none';
-        document.getElementById('micStatus').innerText = "";
+        status.innerText = "";
     };
 
     recognition.onerror = function(event) {
-        isListening = false;
-        const btn = document.getElementById('autoMicBtn');
+        isRecording = false;
         btn.style.background = '#262730';
         btn.style.boxShadow = 'none';
-        document.getElementById('micStatus').innerText = "";
+        if (event.error === 'not-allowed') {
+            status.innerText = "Allow Mic permission in browser settings";
+        } else {
+            status.innerText = "No speech heard. Try again.";
+        }
     };
-} else {
-    document.getElementById('micStatus').innerText = "Mic not supported in this browser";
-}
 
-function toggleListening() {
-    if (!recognition) return;
-    if (isListening) {
-        recognition.stop();
-    } else {
-        recognition.start();
-    }
-}
-</script>
-"""
-
-# Embed auto-detecting mic widget
-components.html(mic_component, height=52)
-
-# 2. Main Chat Input Form
-with st.form(key="tracer_chat_form", clear_on_submit=True):
-    col_text, col_send = st.columns([8.8, 1.2])
-    with col_text:
-        typed_prompt = st.text_input(
-            "Message AI of Tracer",
-            placeholder="Ask anything or tap mic above...",
-            label_visibility="collapsed"
-        )
-    with col_send:
-        submit_btn = st.form_submit_button("⬆")
-
-# --- Process & Stream AI Response ---
-if submit_btn and typed_prompt and typed_prompt.strip():
-    user_query = typed_prompt.strip()
-
-    st.session_state.messages.append({"role": "user", "content": user_query})
-    with st.chat_message("user"):
-        st.markdown(user_query)
-
-    with st.chat_message("assistant"):
-        if not client:
-            st.error("Groq client is not initialized. Please verify your API key.")
-        else:
-            try:
-                system_instruction = {
-                    "role": "system",
-                    "content": (
-                        """You are AI of Tracer, a world-class, highly capable AI assistant founded and created by Aman Chauhan. You possess broad, deep intelligence across coding, science, mathematics, literature, and general reasoning.
-
-STRICT LANGUAGE & STYLE RULES:
-1. LANGUAGE MATCHING: Always respond in the exact language the user wrote to you in. If the user writes in English, reply in English. If in Hindi, reply in Hindi. If in Hinglish, reply in Hinglish. NEVER output Arabic or any other unprompted language.
-2. CREATOR RECOGNITION: If asked who founded, created, built, or owns you, proudly state that you were founded and created by Aman Chauhan. For all other questions, focus directly on high-quality, articulate, structured answers.
-3. COMPREHENSIVE INTELLIGENCE: Be clear, structured, and helpful. Use markdown, bullet points, or code formatting whenever appropriate."""
-                    )
-                }
-
-                recent_messages = st.session_state.messages[-6:]
-                clean_history = [
-                    {"role": m["role"], "content": str(m["content"])}
-                    for m in recent_messages
-                    if m.get("content") and str(m["content"]).strip()
-                ]
-
-                chat_payload = [system_instruction] + clean_history
-
-                stream = client.chat.completions.create(
-                    messages=chat_payload,
-                    model=ACTIVE_MODEL,
-                    temperature=0.4,
-                    max_tokens=1024,
-                    stream=True
-                )
-
-                def generate_chunks():
-                    for chunk in stream:
-                        content = chunk.choices[0].delta.content
-                        if content:
-                            yield content
-
-                bot_reply = st.write_stream(generate_chunks)
-                st.session_state.messages.append({"role": "assistant", "content": bot_reply})
-
-            except Exception as e:
-                st.error(f"Groq API Error: {e}")
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
