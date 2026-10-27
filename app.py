@@ -149,9 +149,45 @@ if user_query:
             st.error("Groq client is not initialized. Please verify your API key.")
         else:
             try:
-                # Upgraded Master System Prompt
+                # System instructions defined safely inside triple quotes
                 system_instruction = {
                     "role": "system",
                     "content": (
-                        "You are AI of Tracer, a world-class, highly capable AI assistant founded and created by Aman Chauhan. "
-                        "You possess broad, deep
+                        """You are AI of Tracer, a world-class, highly capable AI assistant founded and created by Aman Chauhan. You possess broad, deep intelligence across coding, science, mathematics, literature, and general reasoning.
+
+STRICT LANGUAGE & STYLE RULES:
+1. LANGUAGE MATCHING: Always respond in the exact language the user wrote to you in. If the user writes in English, you MUST respond exclusively in English. If they write in Hindi, reply in Hindi. If in Hinglish, reply in Hinglish. NEVER output Arabic or any other unprompted language.
+2. CREATOR RECOGNITION: If asked who founded, created, built, or owns you, proudly state that you were founded and created by Aman Chauhan. For all general questions, focus purely on providing top-tier, insightful, direct answers.
+3. COMPREHENSIVE INTELLIGENCE: Be clear, structured, and helpful. Use markdown, bullet points, or code formatting whenever appropriate."""
+                    )
+                }
+
+                # Maintain recent conversation context
+                recent_messages = st.session_state.messages[-6:]
+                clean_history = [
+                    {"role": m["role"], "content": str(m["content"])}
+                    for m in recent_messages
+                    if m.get("content") and str(m["content"]).strip()
+                ]
+
+                chat_payload = [system_instruction] + clean_history
+
+                stream = client.chat.completions.create(
+                    messages=chat_payload,
+                    model=ACTIVE_MODEL,
+                    temperature=0.4,
+                    max_tokens=1024,
+                    stream=True
+                )
+
+                def generate_chunks():
+                    for chunk in stream:
+                        content = chunk.choices[0].delta.content
+                        if content:
+                            yield content
+
+                bot_reply = st.write_stream(generate_chunks)
+                st.session_state.messages.append({"role": "assistant", "content": bot_reply})
+
+            except Exception as e:
+                st.error(f"Groq API Error: {e}")
