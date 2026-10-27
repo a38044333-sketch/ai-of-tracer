@@ -10,6 +10,34 @@ st.set_page_config(
     layout="centered"
 )
 
+# Custom CSS to float the input bar + mic button at the bottom like ChatGPT/Gemini
+st.markdown("""
+<style>
+/* Add space at bottom so messages don't get covered by the bottom bar */
+.main .block-container {
+    padding-bottom: 120px;
+}
+
+/* Floating bottom bar */
+div[data-testid="stVerticalBlock"] > div:has(div.tracer-bottom-bar) {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: #0e1117;
+    padding: 1rem 1.5rem 1.2rem 1.5rem;
+    z-index: 999;
+    box-shadow: 0 -10px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* Align mic button neatly with the input field */
+div.tracer-bottom-bar {
+    max-width: 720px;
+    margin: 0 auto;
+}
+</style>
+""", unsafe_allow_html=True)
+
 st.title("⚡ AI of Tracer")
 st.caption("Free Unlimited AI Assistant — Founded by Aman Chauhan")
 
@@ -24,37 +52,29 @@ if GROQ_API_KEY:
     except Exception as e:
         st.error(f"Failed to initialize Groq client: {e}")
 
-# --- Dynamic Model Resolver (Prevents 404 Model Not Found) ---
+# --- Dynamic Model Selection ---
 @st.cache_resource
 def resolve_active_model(_client):
     if not _client:
-        return "llama3-8b-8192"
+        return "llama-3.3-70b-versatile"
     try:
-        # Fetch current models directly supported by your key
         available_models = [m.id for m in _client.models.list().data]
-        
-        # Priority fallback preference
-        preferred_models = [
+        preferred = [
             "llama-3.3-70b-versatile",
             "llama-3.1-8b-instant",
             "llama3-70b-8192",
             "llama3-8b-8192",
-            "mixtral-8x7b-32768",
-            "gemma2-9b-it"
+            "mixtral-8x7b-32768"
         ]
-        
-        for pref in preferred_models:
+        for pref in preferred:
             if pref in available_models:
                 return pref
-        
-        # Fallback to the first non-whisper, non-guard chat model available
         for m in available_models:
             if "whisper" not in m and "guard" not in m and "vision" not in m:
                 return m
     except Exception:
         pass
-    
-    return "llama3-8b-8192"
+    return "llama-3.3-70b-versatile"
 
 ACTIVE_MODEL = resolve_active_model(client)
 
@@ -65,22 +85,12 @@ if "messages" not in st.session_state:
 if "last_voice_prompt" not in st.session_state:
     st.session_state.last_voice_prompt = None
 
-# --- Sidebar: Visual & Voice Tools ---
+# --- Sidebar Tools ---
 with st.sidebar:
-    st.header("📸 Visual & Audio Input")
-    
+    st.header("📸 Visual Input")
     captured_img = st.camera_input("Take a photo")
     if captured_img:
         st.success("Photo captured! (Tracer Vision)")
-    
-    st.write("🎙️ **Voice Input:**")
-    voice_prompt = speech_to_text(
-        language="en",
-        start_prompt="Tap to Speak",
-        stop_prompt="Stop Recording",
-        just_once=True,
-        key="tracer_voice_mic"
-    )
 
     st.markdown("---")
     st.write(f"**Active Model:** `{ACTIVE_MODEL}`")
@@ -94,12 +104,36 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# --- Capture Input (Chat Box or Microphone) ---
-text_input = st.chat_input("Ask anything...")
+# --- Bottom Bar: Text Input + Mic Button Side-by-Side ---
+st.markdown('<div class="tracer-bottom-bar"></div>', unsafe_allow_html=True)
+col_input, col_mic = st.columns([8.5, 1.5], vertical_alignment="bottom")
+
+with col_input:
+    with st.form(key="tracer_chat_form", clear_on_submit=True):
+        f_col1, f_col2 = st.columns([9, 1])
+        with f_col1:
+            typed_prompt = st.text_input(
+                "Message AI of Tracer",
+                placeholder="Ask anything...",
+                label_visibility="collapsed"
+            )
+        with f_col2:
+            submit_btn = st.form_submit_button("⬆")
+
+with col_mic:
+    voice_prompt = speech_to_text(
+        language="en",
+        start_prompt="🎙️",
+        stop_prompt="⏹️",
+        just_once=True,
+        key="tracer_voice_mic"
+    )
+
+# --- Determine User Input (from typing or voice) ---
 user_query = None
 
-if text_input and text_input.strip():
-    user_query = text_input.strip()
+if submit_btn and typed_prompt.strip():
+    user_query = typed_prompt.strip()
 elif voice_prompt and voice_prompt.strip() and voice_prompt != st.session_state.last_voice_prompt:
     user_query = voice_prompt.strip()
     st.session_state.last_voice_prompt = voice_prompt
@@ -126,7 +160,6 @@ if user_query:
                     ),
                 }
 
-                # Ensure only clean, non-empty text strings are sent
                 clean_history = [
                     {"role": m["role"], "content": str(m["content"])}
                     for m in st.session_state.messages
